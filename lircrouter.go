@@ -38,6 +38,7 @@ func (l *Router) Handle(remote string, button string, handle Handle) {
 
 // Run this in a go routine to listen for IR Key Press Events
 func (l *Router) Run() {
+	l.running = true
 	var rb remoteButton
 
 	for {

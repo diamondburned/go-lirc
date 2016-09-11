@@ -20,6 +20,7 @@ type Router struct {
 	writer     *bufio.Writer
 	reply      chan Reply
 	receive    chan Event
+	running    bool
 }
 
 // Event represents the IR Remote Key Press Event
@@ -57,12 +58,13 @@ func Init(path string) (*Router, error) {
 	l.receive = make(chan Event)
 
 	scanner := bufio.NewScanner(c)
-	go reader(scanner, l.receive, l.reply)
+
+	go reader(scanner, l)
 
 	return l, nil
 }
 
-func reader(scanner *bufio.Scanner, receive chan Event, reply chan Reply) {
+func reader(scanner *bufio.Scanner, router *Router) {
 	const (
 		RECEIVE = iota
 		REPLY
@@ -111,7 +113,7 @@ func reader(scanner *bufio.Scanner, receive chan Event, reply chan Reply) {
 				event.Code = code
 				event.Button = r[2]
 				event.Remote = r[3]
-				receive <- event
+				router.receive <- event
 			}
 		case REPLY:
 			message.Command = line
@@ -126,7 +128,7 @@ func reader(scanner *bufio.Scanner, receive chan Event, reply chan Reply) {
 			} else if line == "END" {
 				message.Success = 1
 				state = RECEIVE
-				reply <- message
+				router.reply <- message
 			} else if line == "ERROR" {
 				message.Success = 0
 				state = DATA_START
@@ -137,7 +139,7 @@ func reader(scanner *bufio.Scanner, receive chan Event, reply chan Reply) {
 		case DATA_START:
 			if line == "END" {
 				state = RECEIVE
-				reply <- message
+				router.reply <- message
 			} else if line == "DATA" {
 				state = DATA_LEN
 			} else {
@@ -165,14 +167,17 @@ func reader(scanner *bufio.Scanner, receive chan Event, reply chan Reply) {
 		case END:
 			state = RECEIVE
 			if line == "END" {
-				reply <- message
+				router.reply <- message
 			} else {
 				log.Println("Invalid lirc reply message received - invalid end")
 			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Println("error reading from lircd socket")
+		// only log error if the router is still in running state
+		if router.running {
+			log.Println("error reading from lircd socket")
+		}
 	}
 }
 
@@ -212,6 +217,7 @@ func (l *Router) SendLong(command string, delay time.Duration) error {
 
 // Close the connection to lirc daemon
 func (l *Router) Close() {
+	l.running = false
 	l.connection.Close()
 	close(l.receive)
 }
