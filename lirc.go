@@ -42,7 +42,7 @@ type Reply struct {
 func Init(path string) (*Router, error) {
 	l := new(Router)
 
-	c, err := net.Dial("unix", path)
+	l.connection, err := net.Dial("unix", path)
 
 	if err != nil {
 		return nil, err
@@ -210,6 +210,5 @@ func (l *Router) SendLong(command string, delay time.Duration) error {
 
 // Close the connection to lirc daemon
 func (l *Router) Close() {
-	//l.connection.Close()
-	log.Println("Testing my changes")
+	l.connection.Close()	
 }
