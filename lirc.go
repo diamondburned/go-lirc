@@ -16,7 +16,7 @@ type Router struct {
 	handlers map[remoteButton]Handle
 
 	path       string
-	connection *net.Conn
+	connection net.Conn
 	writer     *bufio.Writer
 	reply      chan Reply
 	receive    chan Event
@@ -48,7 +48,7 @@ func Init(path string) (*Router, error) {
 		return nil, err
 	}
 
-	l.connection = &c
+	l.connection = c
 
 	l.path = path
 
