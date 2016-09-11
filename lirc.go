@@ -180,7 +180,6 @@ func reader(router *Router) {
 	} else {
 		log.Println("lircd connection error")
 		router.Close()
-		os.Exit(1)
 	}
 }
 
