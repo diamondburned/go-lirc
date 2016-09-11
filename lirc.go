@@ -213,4 +213,5 @@ func (l *Router) SendLong(command string, delay time.Duration) error {
 // Close the connection to lirc daemon
 func (l *Router) Close() {
 	l.connection.Close()
+	close(l.receive)
 }

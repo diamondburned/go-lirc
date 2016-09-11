@@ -41,7 +41,11 @@ func (l *Router) Run() {
 	var rb remoteButton
 
 	for {
-		event := <-l.receive
+		event, success := <-l.receive
+		if !success {
+			break
+		}
+
 		match := 0
 
 		// Check for exact match
