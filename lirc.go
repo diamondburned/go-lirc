@@ -104,7 +104,7 @@ func reader(router *Router) {
 				}
 
 				var event Event
-				event.Repeat, err = strconv.Atoi(r[1])
+				event.Repeat, err = strconv.ParseInt(r[1], 16, 0)
 				if err != nil {
 					log.Println("Invalid lirc broadcats message received - invalid repeat count")
 				}
