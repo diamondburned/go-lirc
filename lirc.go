@@ -26,7 +26,7 @@ type Router struct {
 // Event represents the IR Remote Key Press Event
 type Event struct {
 	Code   uint64
-	Repeat int
+	Repeat int64
 	Button string
 	Remote string
 }
