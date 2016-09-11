@@ -221,5 +221,4 @@ func (l *Router) Close() {
 	l.running = false
 	l.connection.Close()
 	close(l.receive)
-	log.Println("Router closed")
 }
