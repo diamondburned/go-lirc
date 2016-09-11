@@ -16,7 +16,7 @@ type Router struct {
 	handlers map[remoteButton]Handle
 
 	path       string
-	connection net.Conn
+	connection *net.Conn
 	writer     *bufio.Writer
 	reply      chan Reply
 	receive    chan Event
@@ -42,11 +42,13 @@ type Reply struct {
 func Init(path string) (*Router, error) {
 	l := new(Router)
 
-	l.connection, err := net.Dial("unix", path)
+	c, err := net.Dial("unix", path)
 
 	if err != nil {
 		return nil, err
 	}
+
+	l.connection = &c
 
 	l.path = path
 
@@ -210,5 +212,5 @@ func (l *Router) SendLong(command string, delay time.Duration) error {
 
 // Close the connection to lirc daemon
 func (l *Router) Close() {
-	l.connection.Close()	
+	l.connection.Close()
 }
