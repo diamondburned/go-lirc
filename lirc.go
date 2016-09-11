@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -57,14 +58,12 @@ func Init(path string) (*Router, error) {
 	l.reply = make(chan Reply)
 	l.receive = make(chan Event)
 
-	scanner := bufio.NewScanner(c)
-
-	go reader(scanner, l)
+	go reader(l)
 
 	return l, nil
 }
 
-func reader(scanner *bufio.Scanner, router *Router) {
+func reader(router *Router) {
 	const (
 		RECEIVE = iota
 		REPLY
@@ -79,7 +78,7 @@ func reader(scanner *bufio.Scanner, router *Router) {
 	var message Reply
 	state := RECEIVE
 	dataCnt := 0
-
+	scanner := bufio.NewScanner(router.connection)
 	for scanner.Scan() {
 		line := scanner.Text()
 
@@ -178,6 +177,10 @@ func reader(scanner *bufio.Scanner, router *Router) {
 		if router.running {
 			log.Println("error reading from lircd socket")
 		}
+	} else {
+		log.Println("lircd connection error")
+		router.Close()
+		os.Exit(1)
 	}
 }
 
@@ -220,4 +223,5 @@ func (l *Router) Close() {
 	l.running = false
 	l.connection.Close()
 	close(l.receive)
+	log.Println("Router closed")
 }
