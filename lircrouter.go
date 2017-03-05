@@ -1,7 +1,6 @@
 package lirc
 
 import (
-	"log"
 	"path/filepath"
 )
 
@@ -46,9 +45,6 @@ func (l *Router) Run() {
 		if !success {
 			break
 		}
-
-		match := 0
-
 		// Check for exact match
 		rb.remote = event.Remote
 		rb.button = event.Button
@@ -64,12 +60,7 @@ func (l *Router) Run() {
 
 			if remoteMatched && buttonMatched {
 				h(event)
-				match = 1
 			}
-		}
-
-		if match == 0 {
-			log.Println("No match for ", event)
 		}
 	}
 }

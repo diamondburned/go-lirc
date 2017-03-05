@@ -16,6 +16,7 @@ type Router struct {
 	handlers map[remoteButton]Handle
 
 	path       string
+	host       string
 	connection net.Conn
 	writer     *bufio.Writer
 	reply      chan Reply
@@ -52,6 +53,28 @@ func Init(path string) (*Router, error) {
 	l.connection = c
 
 	l.path = path
+
+	l.writer = bufio.NewWriter(c)
+	l.reply = make(chan Reply)
+	l.receive = make(chan Event)
+
+	go reader(l)
+
+	return l, nil
+}
+
+func InitTCP(host string) (*Router, error) {
+	l := new(Router)
+
+	c, err := net.Dial("tcp", host)
+
+	if err != nil {
+		return nil, err
+	}
+
+	l.connection = c
+
+	l.host = host
 
 	l.writer = bufio.NewWriter(c)
 	l.reply = make(chan Reply)
