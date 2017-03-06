@@ -199,6 +199,7 @@ func reader(router *Router) {
 		if router.running {
 			log.Println("error reading from lircd socket")
 		}
+		router.Close()
 	} else {
 		log.Println("lircd connection error")
 		router.Close()
