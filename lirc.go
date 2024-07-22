@@ -30,12 +30,15 @@ type Connection struct {
 	dialer func(context.Context) (net.Conn, error)
 }
 
+// DefaultDialer is the default dialer used by NewUnix and NewTCP.
+var DefaultDialer = net.Dialer{}
+
 // NewUnix creates a new lirc connection that connects to lircd using a Unix
 // socket.
 // Connection will not be established; you must call Start to connect to lircd.
 func NewUnix(path string) *Connection {
 	return newRouter(func(ctx context.Context) (net.Conn, error) {
-		return net.DefaultResolver.Dial(ctx, "unix", path)
+		return DefaultDialer.DialContext(ctx, "unix", path)
 	})
 }
 
@@ -44,7 +47,7 @@ func NewUnix(path string) *Connection {
 // Connection will not be established; you must call Start to connect to lircd.
 func NewTCP(host string) *Connection {
 	return newRouter(func(ctx context.Context) (net.Conn, error) {
-		return net.DefaultResolver.Dial(ctx, "tcp", host)
+		return DefaultDialer.DialContext(ctx, "tcp", host)
 	})
 }
 
@@ -61,7 +64,7 @@ func newRouter(dialer func(ctx context.Context) (net.Conn, error)) *Connection {
 func (l *Connection) SendCommand(ctx context.Context, command Command) (CommandReply, error) {
 	select {
 	case <-ctx.Done():
-		return CommandReply{}, ctx.Err()
+		return CommandReply{}, fmt.Errorf("error sending command: %w", ctx.Err())
 	case l.send <- command:
 		// safe to continue
 	}
@@ -71,7 +74,7 @@ func (l *Connection) SendCommand(ctx context.Context, command Command) (CommandR
 
 	select {
 	case <-ctx.Done():
-		return CommandReply{}, ctx.Err()
+		return CommandReply{}, fmt.Errorf("error waiting for reply: %w", ctx.Err())
 	case reply := <-l.reply:
 		if reply.Command != command.EncodeCommand()[0] {
 			return reply, fmt.Errorf("unexpected reply command: %q", reply.Command)
@@ -108,6 +111,29 @@ const (
 	stateDataEnd
 )
 
+func (s connectionState) String() string {
+	switch s {
+	case stateReceive:
+		return "receive"
+	case stateReply:
+		return "reply"
+	case stateMessage:
+		return "message"
+	case stateStatus:
+		return "status"
+	case stateDataStart:
+		return "data start"
+	case stateDataLength:
+		return "data length"
+	case stateData:
+		return "data"
+	case stateDataEnd:
+		return "data end"
+	default:
+		return "unknown"
+	}
+}
+
 // Start starts the lirc connection. It blocks until the connection is closed or
 // ctx is done.
 func (r *Connection) Start(ctx context.Context, logger *slog.Logger) error {
@@ -136,6 +162,7 @@ func (r *Connection) Start(ctx context.Context, logger *slog.Logger) error {
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
 			line := scanner.Text()
+			logger.Debug("received line from lircd", "line", line)
 			reader.read(ctx, line)
 		}
 
@@ -153,13 +180,26 @@ func (r *Connection) Start(ctx context.Context, logger *slog.Logger) error {
 		defer cancel(nil)
 
 		var cmd Command
+		var receivedTime time.Time
 		for {
 			select {
 			case <-ctx.Done():
 				return
 
 			case cmd = <-sendingCh:
-				raw := strings.Join(cmd.EncodeCommand(), " ") + "\n"
+				// Prevent the user from sending any other commands until we've
+				// received the reply for this one.
+				sendingCh = nil
+
+				receivedTime = time.Now()
+
+				encoded := cmd.EncodeCommand()
+				raw := strings.Join(encoded, " ") + "\n"
+
+				logger.Debug(
+					"sending command to lircd",
+					"command", encoded[0])
+
 				if _, err := io.WriteString(conn, raw); err != nil {
 					logger.Error(
 						"error writing to lircd socket",
@@ -168,15 +208,15 @@ func (r *Connection) Start(ctx context.Context, logger *slog.Logger) error {
 					return
 				}
 
-				// Prevent the user from sending any other commands until we've
-				// received the reply for this one.
-				sendingCh = nil
-
 			case reply := <-repliesCh:
 				if reply.Command == "SIGHUP" {
 					logger.InfoContext(ctx, "lircd has been reloaded")
 					continue
 				}
+
+				logger.Debug(
+					"received reply from lircd",
+					"command", reply.Command)
 
 				select {
 				case <-ctx.Done():
@@ -185,6 +225,12 @@ func (r *Connection) Start(ctx context.Context, logger *slog.Logger) error {
 					// Reinstate the ability to send commands.
 					sendingCh = r.send
 				}
+
+				took := time.Since(receivedTime)
+				logger.Debug(
+					"command roundtrip time",
+					"command", reply.Command,
+					"took", took)
 			}
 		}
 	}()
@@ -206,11 +252,11 @@ type lircReader struct {
 	dataLength int
 
 	logger  *slog.Logger
-	events  chan ButtonPress
-	replies chan CommandReply
+	events  chan<- ButtonPress
+	replies chan<- CommandReply
 }
 
-func newLircReader(logger *slog.Logger, events chan ButtonPress, replies chan CommandReply) *lircReader {
+func newLircReader(logger *slog.Logger, events chan<- ButtonPress, replies chan<- CommandReply) *lircReader {
 	return &lircReader{
 		state:   stateReceive,
 		logger:  logger,
@@ -219,18 +265,29 @@ func newLircReader(logger *slog.Logger, events chan ButtonPress, replies chan Co
 	}
 }
 
+func (r *lircReader) setState(state connectionState) {
+	r.state = state
+	r.logger.Debug("lirc reader state changed", "state", state)
+}
+
 func (r *lircReader) stateError(err string, attrs ...any) {
 	r.logger.
 		With("err", err).
 		Error("lirc error", attrs...)
-	r.state = stateReceive
+	r.setState(stateReceive)
 }
 
 func (r *lircReader) flushReply(ctx context.Context) {
 	select {
 	case <-ctx.Done():
-		// no
+		r.logger.Warn(
+			"context done, dropping reply",
+			"err", ctx.Err(),
+			"command", r.reply.Command)
 	case r.replies <- r.reply:
+		r.logger.Debug(
+			"delivered reply back to event loop",
+			"command", r.reply.Command)
 	}
 }
 
@@ -238,7 +295,7 @@ func (r *lircReader) read(ctx context.Context, line string) {
 	switch r.state {
 	case stateReceive:
 		if line == "BEGIN" {
-			r.state = stateReply
+			r.setState(stateReply)
 
 			r.reply = CommandReply{}
 			r.dataCount = 0
@@ -293,17 +350,17 @@ func (r *lircReader) read(ctx context.Context, line string) {
 			Command: line,
 			Success: true,
 		}
-		r.state = stateStatus
+		r.setState(stateStatus)
 
 	case stateStatus:
 		switch line {
 		case "SUCCESS":
-			r.state = stateDataStart
+			r.setState(stateDataStart)
 		case "ERROR":
 			r.reply.Success = false
-			r.state = stateDataStart
+			r.setState(stateDataStart)
 		case "END":
-			r.state = stateReceive
+			r.setState(stateReceive)
 			r.flushReply(ctx)
 		default:
 			r.stateError(
@@ -315,9 +372,9 @@ func (r *lircReader) read(ctx context.Context, line string) {
 	case stateDataStart:
 		switch line {
 		case "DATA":
-			r.state = stateDataLength
+			r.setState(stateDataLength)
 		case "END":
-			r.state = stateReceive
+			r.setState(stateReceive)
 			r.flushReply(ctx)
 		default:
 			r.stateError(
@@ -336,15 +393,15 @@ func (r *lircReader) read(ctx context.Context, line string) {
 			return
 		}
 
-		r.state = stateData
+		r.setState(stateData)
 		r.dataCount = 0
 		r.reply.Data = make([]string, 0, r.dataLength)
 
 	case stateData:
 		r.reply.Data = append(r.reply.Data, line)
 		r.dataCount++
-		if r.dataCount > r.dataLength {
-			r.state = stateDataEnd
+		if r.dataCount >= r.dataLength {
+			r.setState(stateDataEnd)
 		}
 
 	case stateDataEnd:
@@ -356,6 +413,6 @@ func (r *lircReader) read(ctx context.Context, line string) {
 		}
 
 		r.flushReply(ctx)
-		r.state = stateReceive
+		r.setState(stateReceive)
 	}
 }
