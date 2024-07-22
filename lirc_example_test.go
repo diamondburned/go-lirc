@@ -57,7 +57,7 @@ func Example_sendCommand() {
 		lirc.List{RemoteControl: "DenonTuner"},
 		lirc.SendOnce{RemoteControl: "DenonTuner", ButtonName: "PROG-SCAN"},
 	} {
-		resp, err := conn.SendCommand(ctx, lirc.List{RemoteControl: "DenonTuner"})
+		resp, err := conn.SendCommand(ctx, command)
 		if err != nil {
 			slog.Error(
 				"cannot send version command",
