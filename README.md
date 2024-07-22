@@ -1,6 +1,6 @@
-# lirc
+# go-lirc
 
-[![Go Reference](https://pkg.go.dev/badge/libdb.so/lirc.svg)](https://pkg.go.dev/libdb.so/lirc)
+[![Go Reference](https://pkg.go.dev/badge/libdb.so/go-lirc.svg)](https://pkg.go.dev/libdb.so/go-lirc)
 
 Package lirc provides a Go client for the Linux Infrared Remote Control (LIRC)
 daemon.
@@ -8,7 +8,7 @@ daemon.
 ## Importing
 
 ```go
-import "libdb.so/lirc"
+import "libdb.so/go-lirc"
 ```
 
 ## Example
@@ -22,7 +22,7 @@ import (
 	"os"
 	"os/signal"
 
-	"libdb.so/lirc"
+	"libdb.so/go-lirc"
 )
 
 func main() {

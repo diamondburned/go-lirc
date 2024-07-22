@@ -1,4 +1,4 @@
-module libdb.so/lirc
+module libdb.so/go-lirc
 
 go 1.22.0
 

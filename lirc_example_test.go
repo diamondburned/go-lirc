@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"libdb.so/lirc"
+	"libdb.so/go-lirc"
 )
 
 func Example() {

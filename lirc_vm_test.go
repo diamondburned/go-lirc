@@ -7,7 +7,7 @@ import (
 
 	"github.com/alecthomas/assert/v2"
 	"github.com/neilotoole/slogt"
-	"libdb.so/lirc"
+	"libdb.so/go-lirc"
 )
 
 func TestVersion(t *testing.T) {
