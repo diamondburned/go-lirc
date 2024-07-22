@@ -10,6 +10,8 @@ type ButtonHandlers map[string]ButtonHandler
 type ButtonHandler func(ButtonPress)
 
 // RouteEvents routes events to the appropriate handler until ctx is canceled.
+// Both the remote control name and button name can be matched with patterns
+// using filepath.Match. For example, "*" will match any string.
 func RouteEvents(ctx context.Context, events <-chan ButtonPress, handlers RemoteHandlers) error {
 	for {
 		select {
